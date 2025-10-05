@@ -7,6 +7,8 @@ import {
   TextInput,
 } from "react-native";
 import AnimatedPressable from "../src/components/AnimatedPressable";
+import ActionModal from "../src/components/ActionModal";
+import ReminderModal from "../src/components/ReminderModal";
 import * as React from "react";
 import { isToday, isFuture, isPast } from "date-fns";
 
@@ -15,7 +17,6 @@ import { Shadow } from "react-native-shadow-2";
 
 import * as SecureStore from "expo-secure-store";
 import * as Notifications from "expo-notifications";
-import Modal from "react-native-modal";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { useAppState } from "../src/utils/useAppState";
@@ -107,13 +108,17 @@ export default function App() {
       Notifications.addNotificationResponseReceivedListener((response) => {
         const { reminderId } = response.notification.request.content.data;
 
+        // Note: Snooze and dismiss actions only come from intrusive alarms now
+        // Regular notifications (daily/weekly/monthly/one-time) no longer have action buttons
         if (response.actionIdentifier === "snooze") {
-          console.log("Snooze requested for reminder:", reminderId);
+          console.log("Snooze requested for intrusive alarm:", reminderId);
+          // Intrusive alarm snooze is handled by expo-alarm-module automatically
         } else if (response.actionIdentifier === "dismiss") {
-          // Notification is automatically dismissed
+          console.log("Dismiss requested for intrusive alarm:", reminderId);
+          // Intrusive alarm dismiss is handled by expo-alarm-module automatically
         } else {
-          // Default tap - you could open the reminder for editing
-          console.log("Opening reminder for edit:", reminderId);
+          // Default tap - could open the reminder for editing
+          console.log("Notification tapped:", reminderId);
         }
       });
 
@@ -422,18 +427,15 @@ export default function App() {
     }
 
     return (
-      <AnimatedPressable
-        key={reminder.id}
-        onPress={() => handleOpenActionModal(reminder)}
-      >
-        <View className='mx-4 mb-3'>
-          <Shadow
-            stretch={true}
-            offset={[6, 6]}
-            distance={0}
-            startColor='#000000ff'
-            style={{ borderRadius: 12 }}
-          >
+      <View key={reminder.id} className='mx-4 mb-3'>
+        <Shadow
+          stretch={true}
+          offset={[5, 5]}
+          distance={0}
+          startColor='#000000ff'
+          style={{ borderRadius: 12 }}
+        >
+          <AnimatedPressable onPress={() => handleOpenActionModal(reminder)}>
             <View
               style={{ backgroundColor: `#${color}` }}
               className='rounded-xl border-2 p-3'
@@ -472,9 +474,9 @@ export default function App() {
                 </View>
               )}
             </View>
-          </Shadow>
-        </View>
-      </AnimatedPressable>
+          </AnimatedPressable>
+        </Shadow>
+      </View>
     );
   };
 
@@ -489,7 +491,7 @@ export default function App() {
           {title}
         </Text>
         {reminders.map((reminder, index) =>
-          renderReminder(reminder, index, isPastDue)
+          renderReminder(reminder, index, isPastDue, reminder.id)
         )}
       </View>
     );
@@ -545,402 +547,32 @@ export default function App() {
           </Shadow>
         </View>
 
-        {/* Reminder Modal */}
-        <Modal
+        <ReminderModal
           isVisible={isReminderModalVisible}
-          onBackdropPress={() => setIsReminderModalVisible(false)}
-          backdropOpacity={0.5}
-          animationIn='zoomIn'
-          animationOut='slideOutDown'
-          hideModalContentWhileAnimating={true}
-          backdropTransitionOutTiming={1}
-          avoidKeyboard={true}
-        >
-          <View className='flex items-center justify-center'>
-            <Shadow
-              className='rounded-xl'
-              offset={[7, 7]}
-              distance={0}
-              startColor='#000000ff'
-              style={{ borderRadius: 12 }}
-            >
-              <View className='bg-[#DAF5F0] p-4 rounded-xl flex flex-col items-center border-4'>
-                <Text
-                  style={{ fontFamily: "Archivo" }}
-                  className='m-3 text-lg font-bold'
-                >
-                  {editingReminder ? "Edit Reminder" : "Add New Reminder"}
-                </Text>
+          onClose={() => setIsReminderModalVisible(false)}
+          onSave={handleSaveReminder}
+          editingReminder={editingReminder}
+          reminderMessage={reminderMessage}
+          setReminderMessage={setReminderMessage}
+          alarmType={alarmType}
+          setAlarmType={setAlarmType}
+          reminderType={reminderType}
+          setReminderType={setReminderType}
+          selectedTime={selectedTime}
+          onTimeChange={onTimeChange}
+          showDateTimePicker={showDateTimePicker}
+          showDatePicker={showDatePicker}
+          showTimePicker={showTimePicker}
+          pickerMode={pickerMode}
+        />
 
-                <View className='flex flex-col mb-4 w-full'>
-                  <Text
-                    style={{ fontFamily: "Archivo" }}
-                    className='mb-2 text-sm font-medium'
-                  >
-                    Message
-                  </Text>
-                  <Shadow
-                    className='rounded-2xl'
-                    stretch={true}
-                    offset={[4, 5]}
-                    distance={0}
-                    startColor='#000000ff'
-                    style={{ borderRadius: 12 }}
-                  >
-                    <TextInput
-                      value={reminderMessage}
-                      onChangeText={setReminderMessage}
-                      placeholder='Enter your reminder'
-                      multiline={true}
-                      style={{ fontFamily: "Archivo" }}
-                      className='border-2 rounded-2xl p-3 bg-[#BAFDA2] w-full min-h-[30px]'
-                    />
-                  </Shadow>
-                </View>
-
-                {/* AlarmTypeSelector Inlined */}
-                <View className='w-full mb-4'>
-                  <Text
-                    style={{ fontFamily: "Archivo" }}
-                    className='mb-2 text-sm font-medium'
-                  >
-                    Type
-                  </Text>
-                  <View className='flex-row space-x-2 justify-around'>
-                    {[
-                      {
-                        key: "reminder",
-                        title: "Reminder",
-                        description:
-                          "A standard notification. Can be once, daily, weekly or monthly",
-                      },
-                      {
-                        key: "alarm",
-                        title: "Alarm",
-                        description:
-                          "A loud, persistent alarm for important events.",
-                      },
-                    ].map((type) => (
-                      <Shadow
-                        key={type.key}
-                        stretch={true}
-                        offset={[4, 6]}
-                        distance={0}
-                        startColor='#000000ff'
-                        style={{ borderRadius: 10 }}
-                      >
-                        <AnimatedPressable
-                          onPress={() => setAlarmType(type.key)}
-                          className={`w-52 min-h-20 border-2 rounded-xl p-3 ${
-                            alarmType === type.key
-                              ? "bg-[#BAFDA2] border-black"
-                              : "bg-[#F7D6B4] border-black"
-                          }`}
-                        >
-                          <Text
-                            style={{ fontFamily: "Archivo" }}
-                            className='font-bold text-center text-black'
-                          >
-                            {type.title}
-                          </Text>
-                          <Text
-                            style={{ fontFamily: "Archivo" }}
-                            className='text-xs text-gray-700 text-center'
-                          >
-                            {type.description}
-                          </Text>
-                        </AnimatedPressable>
-                      </Shadow>
-                    ))}
-                  </View>
-                </View>
-
-                {/* ReminderTypeSelector Inlined - Only show for reminders */}
-                {alarmType === "reminder" && (
-                  <View className='w-full mb-4'>
-                    <Text
-                      style={{ fontFamily: "Archivo" }}
-                      className='mb-2 text-sm font-medium'
-                    >
-                      Repeat
-                    </Text>
-                    <View className='flex-row flex-wrap justify-center gap-2'>
-                      {["one-off", "daily", "weekly", "monthly"].map((type) => (
-                        <Shadow
-                          key={type}
-                          offset={[3, 3]}
-                          distance={0}
-                          startColor='#000000ff'
-                          style={{ borderRadius: 10 }}
-                        >
-                          <AnimatedPressable
-                            onPress={() => setReminderType(type)}
-                            className={`min-w-20 px-3 py-2 border-2 rounded-xl ${
-                              reminderType === type
-                                ? "bg-[#BAFDA2] border-black"
-                                : "bg-[#F7D6B4] border-black"
-                            }`}
-                          >
-                            <Text
-                              style={{ fontFamily: "Archivo" }}
-                              className='font-bold text-center text-black'
-                            >
-                              {
-                                {
-                                  "one-off": "One-off",
-                                  daily: "Daily",
-                                  weekly: "Weekly",
-                                  monthly: "Monthly",
-                                }[type]
-                              }
-                            </Text>
-                          </AnimatedPressable>
-                        </Shadow>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Time section - Only show for alarms */}
-                {alarmType === "alarm" && (
-                  <View className='w-full mb-4'>
-                    <Text
-                      style={{ fontFamily: "Archivo" }}
-                      className='mb-2 text-sm font-medium'
-                    >
-                      Time
-                    </Text>
-                    <Shadow
-                      className='rounded-xl'
-                      stretch={true}
-                      offset={[3, 3]}
-                      distance={0}
-                      startColor='#000000ff'
-                      style={{ borderRadius: 8 }}
-                    >
-                      <AnimatedPressable
-                        onPress={showDateTimePicker}
-                        className='border-2 rounded-xl p-3 bg-[#FEFC96] w-full flex-row justify-between items-center'
-                      >
-                        <Text
-                          style={{ fontFamily: "Archivo" }}
-                          className='text-sm'
-                        >
-                          {new Date(selectedTime).toLocaleDateString()} at{" "}
-                          {formatTime(selectedTime)}
-                        </Text>
-                        <Text className='text-lg'>🕐</Text>
-                      </AnimatedPressable>
-                    </Shadow>
-
-                    {showDatePicker && Platform.OS === "android" && (
-                      <DateTimePicker
-                        testID='datePicker'
-                        value={selectedTime}
-                        mode='date'
-                        display='default'
-                        onChange={onTimeChange}
-                        minimumDate={new Date()}
-                      />
-                    )}
-
-                    {showTimePicker && Platform.OS === "android" && (
-                      <DateTimePicker
-                        testID='timePicker'
-                        value={selectedTime}
-                        mode='time'
-                        is24Hour={false}
-                        display='default'
-                        onChange={onTimeChange}
-                      />
-                    )}
-
-                    {showTimePicker && Platform.OS === "ios" && (
-                      <View>
-                        <DateTimePicker
-                          testID='dateTimePicker'
-                          value={selectedTime}
-                          mode='datetime'
-                          is24Hour={false}
-                          display='spinner'
-                          onChange={onTimeChange}
-                          minimumDate={new Date()}
-                        />
-                        <AnimatedPressable
-                          onPress={() => setShowTimePicker(false)}
-                          className='mt-2 p-2 bg-blue-500 rounded'
-                        >
-                          <Text className='text-white text-center'>Done</Text>
-                        </AnimatedPressable>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                <View className='flex flex-row mt-4 gap-2'>
-                  <Shadow
-                    className='rounded-xl'
-                    offset={[4, 4]}
-                    distance={0}
-                    startColor='#000000ff'
-                    style={{ borderRadius: 12 }}
-                  >
-                    <AnimatedPressable
-                      onPress={handleSaveReminder}
-                      className='border-2 rounded-xl px-6 py-3 bg-[#BAFDA2] w-32'
-                    >
-                      <Text
-                        style={{ fontFamily: "Archivo" }}
-                        className='font-medium text-center'
-                      >
-                        {editingReminder ? "Update" : "Add"}
-                      </Text>
-                    </AnimatedPressable>
-                  </Shadow>
-
-                  <Shadow
-                    className='rounded-xl'
-                    offset={[4, 4]}
-                    distance={0}
-                    startColor='#000000ff'
-                    style={{ borderRadius: 12 }}
-                  >
-                    <AnimatedPressable
-                      onPress={() => setIsReminderModalVisible(false)}
-                      className='border-2 rounded-xl px-6 py-3 bg-[#F7D6B4] w-32'
-                    >
-                      <Text
-                        style={{ fontFamily: "Archivo" }}
-                        className='text-center'
-                      >
-                        Cancel
-                      </Text>
-                    </AnimatedPressable>
-                  </Shadow>
-                </View>
-              </View>
-            </Shadow>
-          </View>
-        </Modal>
-
-        {/* Action Modal */}
-        <Modal
-          isVisible={isActionModalVisible && !!selectedActionReminder}
-          onModalHide={() => setSelectedActionReminder(null)}
-          onBackdropPress={() => setIsActionModalVisible(false)}
-          backdropOpacity={0.5}
-          animationIn='zoomIn'
-          animationOut='zoomOut'
-          animationInTiming={150}
-          animationOutTiming={150}
-          hideModalContentWhileAnimating={true}
-          backdropTransitionOutTiming={1}
-          useNativeDriver={true}
-        >
-          {selectedActionReminder && (
-            <View className='flex items-center justify-center'>
-              <Shadow
-                className='rounded-xl'
-                offset={[7, 7]}
-                distance={0}
-                startColor='#000000ff'
-                style={{ borderRadius: 12 }}
-              >
-                <View className='bg-[#DAF5F0] p-4 rounded-xl flex flex-col items-center border-4'>
-                  <Text
-                    style={{ fontFamily: "Archivo" }}
-                    className='m-3 text-lg font-bold text-center'
-                  >
-                    What would you like to do?
-                  </Text>
-
-                  <View className='bg-[#FEFC96] p-3 rounded-lg border-2 mb-4 max-w-xs'>
-                    <Text
-                      style={{ fontFamily: "Archivo" }}
-                      className='text-sm text-center'
-                      numberOfLines={3}
-                    >
-                      {selectedActionReminder.message}
-                    </Text>
-                    {selectedActionReminder.timer && (
-                      <Text
-                        style={{ fontFamily: "Archivo" }}
-                        className='text-xs text-gray-600 text-center mt-1'
-                      >
-                        📅{" "}
-                        {new Date(
-                          selectedActionReminder.timer
-                        ).toLocaleString()}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View className='flex flex-row space-x-3'>
-                    <Shadow
-                      className='rounded-xl'
-                      offset={[4, 4]}
-                      distance={0}
-                      startColor='#000000ff'
-                      style={{ borderRadius: 12 }}
-                    >
-                      <AnimatedPressable
-                        onPress={handleEditReminderFromAction}
-                        className='border-2 rounded-xl px-4 py-3 bg-[#BAFDA2]'
-                      >
-                        <Text
-                          style={{ fontFamily: "Archivo" }}
-                          className='font-medium'
-                        >
-                          ✏️ Edit
-                        </Text>
-                      </AnimatedPressable>
-                    </Shadow>
-
-                    <Shadow
-                      className='rounded-xl'
-                      offset={[4, 4]}
-                      distance={0}
-                      startColor='#000000ff'
-                      style={{ borderRadius: 12 }}
-                    >
-                      <AnimatedPressable
-                        onPress={handleDeleteReminder}
-                        className='border-2 rounded-xl px-4 py-3 bg-[#FFB3B3]'
-                      >
-                        <Text
-                          style={{ fontFamily: "Archivo" }}
-                          className='font-medium'
-                        >
-                          🗑️ Delete
-                        </Text>
-                      </AnimatedPressable>
-                    </Shadow>
-
-                    <Shadow
-                      className='rounded-xl'
-                      offset={[4, 4]}
-                      distance={0}
-                      startColor='#000000ff'
-                      style={{ borderRadius: 12 }}
-                    >
-                      <AnimatedPressable
-                        onPress={() => setIsActionModalVisible(false)}
-                        className='border-2 rounded-xl px-4 py-3 bg-[#F7D6B4]'
-                      >
-                        <Text
-                          style={{ fontFamily: "Archivo" }}
-                          className='font-medium'
-                        >
-                          Cancel
-                        </Text>
-                      </AnimatedPressable>
-                    </Shadow>
-                  </View>
-                </View>
-              </Shadow>
-            </View>
-          )}
-        </Modal>
+        <ActionModal
+          isVisible={isActionModalVisible}
+          onClose={() => setIsActionModalVisible(false)}
+          reminder={selectedActionReminder}
+          onEdit={handleEditReminderFromAction}
+          onDelete={handleDeleteReminder}
+        />
       </View>
     </SafeAreaView>
   );

@@ -1,25 +1,13 @@
 /**
- * Notification Scheduler for Day-Zen Reminder App
+ * Day-Zen Notification Scheduler
  *
- * This module handles ONLY regular notifications using expo-notifications.
- * It does NOT handle intrusive alarms - those use expo-alarm-module in alarm.js.
+ * This module handles all regular (non-intrusive) notifications using `expo-notifications`.
+ * Intrusive alarms are managed separately by `intrusiveAlarmManager.js`.
  *
- * Business Logic:
- * ===============
- * 1. DAILY notifications: Use SchedulableTriggerInputTypes.DAILY trigger with hour/minute
- * 2. WEEKLY notifications: Use SchedulableTriggerInputTypes.WEEKLY trigger with weekday/hour/minute
- * 3. MONTHLY notifications: Use SchedulableTriggerInputTypes.MONTHLY trigger with day/hour/minute
- * 4. ONE-TIME notifications: Use SchedulableTriggerInputTypes.DATE trigger with specific date
- * 5. INTRUSIVE alarms: Handled separately by alarm.js using expo-alarm-module
- *
- * Consolidation Strategy:
- * ======================
- * - Groups reminders by type (daily/weekly/monthly/one-time) and time
- * - Single reminder = individual notification
- * - Multiple reminders at same time = consolidated notification with numbered list
- * - Each notification type has its own Android channel for proper categorization
- *
- * @author Day-Zen Development Team
+ * Core Logic:
+ * - Consolidates multiple reminders into single notifications to avoid clutter.
+ * - Groups reminders by type (daily, weekly, monthly, one-time) and scheduled time.
+ * - Uses dedicated Android channels for each notification type for better user control.
  */
 
 import * as Notifications from "expo-notifications";
@@ -78,26 +66,9 @@ export const initializeNotificationChannels = async () => {
         description: "Non-recurring reminder notifications",
       });
 
-      // Set up notification categories for interactive actions
-      await Notifications.setNotificationCategoryAsync("daily-reminder", [
-        { identifier: "dismiss", buttonTitle: "Dismiss" },
-        { identifier: "snooze", buttonTitle: "Snooze 5min" },
-      ]);
-
-      await Notifications.setNotificationCategoryAsync("weekly-reminder", [
-        { identifier: "dismiss", buttonTitle: "Dismiss" },
-        { identifier: "snooze", buttonTitle: "Snooze 30min" },
-      ]);
-
-      await Notifications.setNotificationCategoryAsync("monthly-reminder", [
-        { identifier: "dismiss", buttonTitle: "Dismiss" },
-        { identifier: "snooze", buttonTitle: "Snooze 1hr" },
-      ]);
-
-      await Notifications.setNotificationCategoryAsync("one-time-reminder", [
-        { identifier: "dismiss", buttonTitle: "Dismiss" },
-        { identifier: "snooze", buttonTitle: "Snooze 10min" },
-      ]);
+      // Regular notifications do not need categories since they don't have interactive actions
+      // Only intrusive alarms (handled by expo-alarm-module) have interactive features
+      // Tapping the notification will automatically open the app
 
       console.log(
         "Notification channels and categories initialized successfully"
@@ -191,38 +162,29 @@ const groupRemindersByTimeAndType = (reminders) => {
   return groups;
 };
 
-// Create consolidated notification content for multiple reminders
 const createConsolidatedContent = (reminders, type) => {
-  const categoryId = getCategoryId(type);
+  const baseContent = {
+    title: `${getTypeEmoji(type)} ${getTypeTitle(type)}`,
+    body: reminders[0].message,
+    data: {
+      reminderId: reminders[0].id,
+      type: "single",
+    },
+  };
 
   if (reminders.length === 1) {
-    return {
-      title: getTypeEmoji(type) + ` ${getTypeTitle(type)}`,
-      body: reminders[0].message,
-      categoryIdentifier: categoryId,
-      data: {
-        reminderId: reminders[0].id,
-        reminderMessage: reminders[0].message,
-        recurring: reminders[0].recurring || false,
-        type: "single",
-      },
-    };
+    return baseContent;
   }
 
-  // Multiple reminders - create a list
   const reminderList = reminders
     .map((r, index) => `${index + 1}. ${r.message}`)
     .join("\n");
-  const reminderIds = reminders.map((r) => r.id);
 
   return {
     title: `${getTypeEmoji(type)} ${reminders.length} ${getTypeTitle(type)}s`,
     body: reminderList,
-    categoryIdentifier: categoryId,
     data: {
-      reminderIds: reminderIds,
-      reminderMessages: reminders.map((r) => r.message),
-      recurring: reminders[0].recurring || false,
+      reminderIds: reminders.map((r) => r.id),
       type: "consolidated",
       count: reminders.length,
     },
@@ -269,16 +231,9 @@ const getChannelId = (type) => {
 };
 
 const getCategoryId = (type) => {
-  switch (type) {
-    case "daily":
-      return "daily-reminder";
-    case "weekly":
-      return "weekly-reminder";
-    case "monthly":
-      return "monthly-reminder";
-    default:
-      return "one-time-reminder";
-  }
+  // Regular notifications don't need categories since they don't have interactive actions
+  // Tapping the notification will automatically open the app
+  return undefined;
 };
 
 // Schedule a consolidated notification for a group of reminders

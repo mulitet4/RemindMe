@@ -40,9 +40,7 @@ const AnimatedPressable = ({ children, style, onPress, ...props }) => {
       <Pressable
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        onPress={handlePress}
-        delayPressIn={0}
-        delayPressOut={0}
+        onPress={onPress}
         {...props}
       >
         {children}
